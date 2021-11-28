@@ -20,3 +20,13 @@ class TestConfigureSSO(BaseAWSCommandParamsTest):
         cmdline = self.prefix + ' logout'
         _, err, _ = self.run_cmd(cmdline, 252)
         self.assertIn('Unknown options', err)
+
+    def test_sso_params(self):
+        cmdline = self.prefix + ' --start_url "https://fake.awsapps.com/start/#/" ' \
+                                '--sso_account_id 1111111111 ' \
+                                '--sso-region eu-west-1 ' \
+                                '--output_format json ' \
+                                '--profile_name fake_profile'
+
+        value, err, another = self.run_cmd(cmdline, 255)
+        self.assertIn('expiresIn', err)

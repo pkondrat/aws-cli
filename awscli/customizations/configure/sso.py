@@ -32,7 +32,6 @@ from awscli.customizations.wizard.ui.selectmenu import select_menu
 from awscli.customizations.sso.utils import do_sso_login
 from awscli.formatter import CLI_OUTPUT_FORMATS
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -125,7 +124,57 @@ class ConfigureSSOCommand(BasicCommand):
         '\n\nNote: The configuration is saved in the shared configuration '
         'file. By default, ``~/.aws/config``.'
     )
-    # TODO: Add CLI parameters to skip prompted values, --start-url, etc.
+    ARG_TABLE = [
+        {
+            'name': 'start_url',
+            'help_text': 'Authorization SSO provider page',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+        {
+            'name': 'sso_account_id',
+            'help_text': 'Account number to setup sso with.',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+        {
+            'name': 'sso-region',
+            'help_text': 'AWS region that would be used for authentication',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+        {
+            'name': 'aws_region',
+            'help_text': 'AWS region that would be used for connection',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+        {
+            'name': 'output_format',
+            'help_text': 'Output format',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+        {
+            'name': 'profile_name',
+            'help_text': 'Profile name to save',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+        {
+            'name': 'sso_role_name',
+            'help_text': 'SSO role name',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+    ]
 
     def __init__(self, session, prompter=None, selector=None,
                  config_writer=None, sso_token_cache=None):
@@ -293,8 +342,17 @@ class ConfigureSSOCommand(BasicCommand):
 
     def _run_main(self, parsed_args, parsed_globals):
         self._unset_session_profile()
-        start_url = self._prompt_for_start_url()
-        sso_region = self._prompt_for_sso_region()
+
+        sso_region = parsed_args.sso_region
+        if not sso_region:
+            sso_region = self._prompt_for_sso_region()
+        self._new_values['sso_region'] = sso_region
+
+        start_url = parsed_args.start_url
+        if not start_url:
+            start_url = self._prompt_for_start_url()
+        self._new_values['sso_start_url'] = start_url
+
         sso_token = do_sso_login(
             self._session,
             sso_region,
@@ -309,14 +367,27 @@ class ConfigureSSOCommand(BasicCommand):
         )
         sso = self._session.create_client('sso', config=client_config)
 
+        # sso_account_id = parsed_args.sso_account_id
+        # if not sso_account_id:
         sso_account_id = self._prompt_for_account(sso, sso_token)
-        sso_role_name = self._prompt_for_role(sso, sso_token, sso_account_id)
+        self._new_values['sso_account_id'] = sso_account_id
+
+        sso_role_name = parsed_args.sso_role_name
+        if not sso_role_name:
+            sso_role_name = self._prompt_for_role(sso, sso_token, sso_account_id)
 
         # General CLI configuration
-        self._prompt_for_cli_default_region()
-        self._prompt_for_cli_output_format()
+        region = parsed_args.aws_region
+        if not region:
+            self._prompt_for_cli_default_region()
 
-        profile_name = self._prompt_for_profile(sso_account_id, sso_role_name)
+        output_format = parsed_args.output_format
+        if not output_format:
+            self._prompt_for_cli_output_format()
+
+        profile_name = parsed_args.profile_name
+        if not profile_name:
+            profile_name = self._prompt_for_profile(sso_account_id, sso_role_name)
 
         usage_msg = (
             '\nTo use this profile, specify the profile name using '
