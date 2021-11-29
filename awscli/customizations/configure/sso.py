@@ -12,6 +12,7 @@
 # language governing permissions and limitations under the License.
 import os
 import logging
+import json
 
 from botocore import UNSIGNED
 from botocore.config import Config
@@ -148,7 +149,7 @@ class ConfigureSSOCommand(BasicCommand):
             'required': False
         },
         {
-            'name': 'sso-region',
+            'name': 'sso_region',
             'help_text': 'AWS region that would be used for authentication',
             'action': 'store',
             'cli_type_name': 'string',
@@ -289,6 +290,15 @@ class ConfigureSSOCommand(BasicCommand):
         self._new_values['sso_role_name'] = sso_role_name
         return sso_role_name
 
+    def _update_accounts_with_roles(self, sso, sso_token, account_ids_list):
+        accounts = []
+        for account in account_ids_list:
+            roles = self._get_all_roles(sso, sso_token, account['accountId'])['roleList']
+            account['roles'] = roles
+            accounts.append(account)
+        return accounts
+
+
     def _prompt_for_profile(self, sso_account_id, sso_role_name):
         if self._original_profile_name:
             profile_name = self._original_profile_name
@@ -349,6 +359,7 @@ class ConfigureSSOCommand(BasicCommand):
         config_store.set_config_provider('profile', ConstantProvider(None))
 
     def _run_main(self, parsed_args, parsed_globals):
+        uni_print("Welcome to PMI AWS-CLI\n")
         self._unset_session_profile()
 
         sso_region = parsed_args.sso_region
@@ -360,8 +371,6 @@ class ConfigureSSOCommand(BasicCommand):
         if not start_url:
             start_url = self._prompt_for_start_url()
         self._new_values['sso_start_url'] = start_url
-
-        sso_region = self._prompt_for_sso_region()
 
         sso_token = do_sso_login(
             self._session,
@@ -377,15 +386,18 @@ class ConfigureSSOCommand(BasicCommand):
         )
         sso = self._session.create_client('sso', config=client_config)
 
-        if parsed_args.list_accounts_only:
+        if parsed_args.list_accounts_only and parsed_args.list_accounts_only == 'true':
             accounts = self._get_all_accounts(sso, sso_token)['accountList']
+            # acc_roles = self._update_accounts_with_roles(sso, sso_token, accounts)
             accounts_msg = (
-                'Here are the accounts you have access to:\n\n'
+                'Here are the accounts you have access to:\n{}'
             )
-            uni_print(usage_msg.format(accounts))
+            uni_print(accounts_msg.format(json.dumps(accounts, indent = 1)))
             return 0
 
-        sso_account_id = self._prompt_for_account(sso, sso_token)
+        sso_account_id = parsed_args.sso_account_id
+        if not sso_account_id:
+            sso_account_id = self._prompt_for_account(sso, sso_token)
         self._new_values['sso_account_id'] = sso_account_id
 
         sso_role_name = parsed_args.sso_role_name
