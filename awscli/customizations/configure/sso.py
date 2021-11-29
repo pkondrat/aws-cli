@@ -125,6 +125,23 @@ class ConfigureSSOCommand(BasicCommand):
         '\n\nNote: The configuration is saved in the shared configuration '
         'file. By default, ``~/.aws/config``.'
     )
+    ARG_TABLE = [
+        {
+            'name': 'start_url',
+            'help_text': 'Authorization SSO provider page',
+            'action': 'store',
+            'cli_type_name': 'string',
+            'required': False
+        },
+        {
+            'name': 'list_accounts_only',
+            'help_text': 'If set to true, only account IDs and names would be returned',
+            'action': 'store',
+            'cli_type_name': 'bool',
+            'required': False
+        },
+    ]
+
     # TODO: Add CLI parameters to skip prompted values, --start-url, etc.
 
     def __init__(self, session, prompter=None, selector=None,
@@ -293,7 +310,12 @@ class ConfigureSSOCommand(BasicCommand):
 
     def _run_main(self, parsed_args, parsed_globals):
         self._unset_session_profile()
-        start_url = self._prompt_for_start_url()
+
+        start_url = parsed_args.start_url
+        if not start_url:
+            start_url = self._prompt_for_start_url()
+        self._new_values['sso_start_url'] = start_url
+
         sso_region = self._prompt_for_sso_region()
         sso_token = do_sso_login(
             self._session,
@@ -308,6 +330,14 @@ class ConfigureSSOCommand(BasicCommand):
             region_name=sso_region,
         )
         sso = self._session.create_client('sso', config=client_config)
+
+        if parsed_args.list_accounts_only:
+            accounts = self._get_all_accounts(sso, sso_token)['accountList']
+            accounts_msg = (
+                'Here are the accounts you have access to:\n\n'
+            )
+            uni_print(usage_msg.format(accounts))
+            return 0
 
         sso_account_id = self._prompt_for_account(sso, sso_token)
         sso_role_name = self._prompt_for_role(sso, sso_token, sso_account_id)
